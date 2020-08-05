@@ -1,391 +1,591 @@
-=========================
-Clang 6.0.0 Release Notes
-=========================
+==========================
+Clang 10.0.0 Release Notes
+==========================
 
 .. contents::
    :local:
    :depth: 2
 
-Written by the `LLVM Team <http://llvm.org/>`_
+Written by the `LLVM Team <https://llvm.org/>`_
+
 
 Introduction
 ============
 
 This document contains the release notes for the Clang C/C++/Objective-C
-frontend, part of the LLVM Compiler Infrastructure, release 6.0.0. Here we
+frontend, part of the LLVM Compiler Infrastructure, release 10.0.0. Here we
 describe the status of Clang in some detail, including major
 improvements from the previous release and new feature work. For the
 general LLVM release notes, see `the LLVM
-documentation <http://llvm.org/docs/ReleaseNotes.html>`_. All LLVM
+documentation <https://llvm.org/docs/ReleaseNotes.html>`_. All LLVM
 releases may be downloaded from the `LLVM releases web
-site <http://llvm.org/releases/>`_.
+site <https://llvm.org/releases/>`_.
 
 For more information about Clang or LLVM, including information about the
-latest release, please see the `Clang Web Site <http://clang.llvm.org>`_ or the
-`LLVM Web Site <http://llvm.org>`_.
+latest release, please see the `Clang Web Site <https://clang.llvm.org>`_ or the
+`LLVM Web Site <https://llvm.org>`_.
 
-What's New in Clang 6.0.0?
-==========================
+
+What's New in Clang 10.0.0?
+===========================
 
 Some of the major new features and improvements to Clang are listed
 here. Generic improvements to Clang as a whole or to its underlying
 infrastructure are described first, followed by language-specific
 sections with improvements to Clang's support for those languages.
 
+Major New Features
+------------------
+
+- clang used to run the actual compilation in a subprocess ("clang -cc1").
+  Now compilations are done in-process by default. ``-fno-integrated-cc1``
+  restores the former behavior. The ``-v`` and ``-###`` flags will print
+  "(in-process)" when compilations are done in-process.
+
+- Concepts support. Clang now supports C++2a Concepts under the -std=c++2a flag.
+
+Improvements to Clang's diagnostics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- ``-Wtautological-overlap-compare`` will warn on negative numbers and non-int
+  types.
+
+- ``-Wtautological-compare`` for self comparisons and
+  ``-Wtautological-overlap-compare`` will now look through member and array
+  access to determine if two operand expressions are the same.
+
+- ``-Wtautological-bitwise-compare`` is a new warning group.  This group has the
+  current warning which diagnoses the tautological comparison of a bitwise
+  operation and a constant. The group also has the new warning which diagnoses
+  when a bitwise-or with a non-negative value is converted to a bool, since
+  that bool will always be true.
+
+- ``-Wbitwise-conditional-parentheses`` will warn on operator precedence issues
+  when mixing bitwise-and (&) and bitwise-or (|) operator with the
+  conditional operator (?:).
+
+- ``-Wrange-loop-analysis`` got several improvements. It no longer warns about a
+  copy being made when the result is bound to an rvalue reference. It no longer
+  warns when an object of a small, trivially copyable type is copied. The
+  warning now offers fix-its. Excluding ``-Wrange-loop-bind-reference`` it is now
+  part of ``-Wall``. To reduce the number of false positives the diagnostic is
+  disabled in macros and template instantiations.
+
+- ``-Wmisleading-indentation`` has been added. This warning is similar to the GCC
+  warning of the same name. It warns about statements that are indented as if
+  they were part of a if/else/for/while statement but are not semantically
+  part of that if/else/for/while.
+
+- ``-Wbitwise-op-parentheses`` and ``-Wlogical-op-parentheses`` are disabled by default.
+
+- The new warnings ``-Wc99-designator`` and ``-Wreorder-init-list`` warn about
+  uses of C99 initializers in C++ mode for cases that are valid in C99 but not
+  in C++20.
+
+- The new warning ``-Wsizeof-array-div`` catches cases like
+  ``int arr[10]; ...sizeof(arr) / sizeof(short)...``
+  (should be ``sizeof(arr) / sizeof(int)``), and the existing warning
+  ``-Wsizeof-pointer-div`` catches more cases.
+
+- The new warning ``-Wxor-used-as-pow`` warns on cases where it looks like
+  the xor operator ``^`` is used to be mean exponentiation, e.g. ``2 ^ 16``.
+
+- The new warning ``-Wfinal-dtor-non-final-class`` warns on classes that
+  have a final destructor but aren't themselves marked final.
+
+- ``-Wextra`` now enables ``-Wdeprecated-copy``. The warning deprecates
+  move and copy constructors in classes where an explicit destructor is
+  declared. This is for compatibility with GCC 9, and forward looking
+  for a change that's being considered for C++23. You can disable it with
+  ``-Wno-deprecated-copy``.
+
+
 Non-comprehensive list of changes in this release
 -------------------------------------------------
 
-- Support for `retpolines <https://support.google.com/faqs/answer/7625886>`_
-  was added to help mitigate "branch target injection" (variant #2) of the
-  "Spectre" speculative side channels described by `Project Zero
-  <https://googleprojectzero.blogspot.com/2018/01/reading-privileged-memory-with-side.html>`_
-  and the `Spectre paper <https://spectreattack.com/spectre.pdf>`_.
+* In both C and C++ (C17 ``6.5.6p8``, C++ ``[expr.add]``), pointer arithmetic is
+  only permitted within arrays. In particular, the behavior of a program is not
+  defined if it adds a non-zero offset (or in C, any offset) to a null pointer,
+  or if it forms a null pointer by subtracting an integer from a non-null
+  pointer, and the LLVM optimizer now uses those guarantees for transformations.
+  This may lead to unintended behavior in code that performs these operations.
+  The Undefined Behavior Sanitizer ``-fsanitize=pointer-overflow`` check has
+  been extended to detect these cases, so that code relying on them can be
+  detected and fixed.
 
-- Bitrig OS was merged back into OpenBSD, so Bitrig support has been
-  removed from Clang/LLVM.
+* The Implicit Conversion Sanitizer (``-fsanitize=implicit-conversion``) has
+  learned to sanitize pre/post increment/decrement of types with bit width
+  smaller than ``int``.
 
-- The default value of ``_MSC_VER`` was raised from 1800 to 1911, making it
-  compatible with the Visual Studio 2015 and 2017 C++ standard library headers.
-  Users should generally expect this to be regularly raised to match the most
-  recently released version of the Visual C++ compiler.
+* For X86 target, ``-march=skylake-avx512``, ``-march=icelake-client``,
+  ``-march=icelake-server``, ``-march=cascadelake``, ``-march=cooperlake`` will default to
+  not using 512-bit zmm registers in vectorized code unless 512-bit intrinsics
+  are used in the source code. 512-bit operations are known to cause the CPUs
+  to run at a lower frequency which can impact performance. This behavior can be
+  changed by passing ``-mprefer-vector-width=512`` on the command line.
 
-- clang now defaults to ``.init_array`` if no gcc installation can be found.
-  If a gcc installation is found, it still prefers ``.ctors`` if the found
-  gcc is older than 4.7.0.
+* Clang now defaults to ``.init_array`` on Linux. It used to use ``.ctors`` if
+  the found GCC installation is older than 4.7.0. Add ``-fno-use-init-array`` to
+  get the old behavior (``.ctors``).
 
-- The new builtin preprocessor macros ``__is_target_arch``,
-  ``__is_target_vendor``, ``__is_target_os``, and ``__is_target_environment``
-  can be used to to examine the individual components of the target triple.
+* The behavior of the flag ``-flax-vector-conversions`` has been modified to
+  more closely match GCC, as described below. In Clang 10 onwards, command lines
+  specifying this flag do not permit implicit vector bitcasts between integer
+  vectors and floating-point vectors. Such conversions are still permitted by
+  default, however, and the default can be explicitly requested with the
+  Clang-specific flag ``-flax-vector-conversions=all``. In a future release of
+  Clang, we intend to change the default to ``-fno-lax-vector-conversions``.
 
+* Improved support for ``octeon`` MIPS-family CPU. Added ``octeon+`` to
+  the list of of CPUs accepted by the driver.
 
-Improvements to Clang's diagnostics
------------------------------------
+* For the WebAssembly target, the ``wasm-opt`` tool will now be run if it is
+  found in the PATH, which can reduce code size.
 
-- ``-Wpragma-pack`` is a new warning that warns in the following cases:
-
-  - When a translation unit is missing terminating ``#pragma pack (pop)``
-    directives.
-
-  - When leaving an included file that changes the current alignment value,
-    i.e. when the alignment before ``#include`` is different to the alignment
-    after ``#include``.
-
-  - ``-Wpragma-pack-suspicious-include`` (disabled by default) warns on an
-    ``#include`` when the included file contains structures or unions affected by
-    a non-default alignment that has been specified using a ``#pragma pack``
-    directive prior to the ``#include``.
-
-- ``-Wobjc-messaging-id`` is a new, non-default warning that warns about
-  message sends to unqualified ``id`` in Objective-C. This warning is useful
-  for projects that would like to avoid any potential future compiler
-  errors/warnings, as the system frameworks might add a method with the same
-  selector which could make the message send to ``id`` ambiguous.
-
-- ``-Wtautological-compare`` now warns when comparing an unsigned integer and 0
-  regardless of whether the constant is signed or unsigned.
-
-- ``-Wtautological-compare`` now warns about comparing a signed integer and 0
-  when the signed integer is coerced to an unsigned type for the comparison.
-  ``-Wsign-compare`` was adjusted not to warn in this case.
-
-- ``-Wtautological-constant-compare`` is a new warning that warns on
-  tautological comparisons between integer variable of the type ``T`` and the
-  largest/smallest possible integer constant of that same type.
-
-- For C code, ``-Wsign-compare``, ``-Wsign-conversion``,
-  ``-Wtautological-constant-compare`` and
-  ``-Wtautological-constant-out-of-range-compare`` were adjusted to use the
-  underlying datatype of ``enum``.
-
-- ``-Wnull-pointer-arithmetic`` now warns about performing pointer arithmetic
-  on a null pointer. Such pointer arithmetic has an undefined behavior if the
-  offset is nonzero. It also now warns about arithmetic on a null pointer
-  treated as a cast from integer to pointer (GNU extension).
-
-- ``-Wzero-as-null-pointer-constant`` was adjusted not to warn on null pointer
-  constants that originate from system macros, except ``NULL`` macro.
-
-- ``-Wdelete-non-virtual-dtor`` can now fire in system headers, so that
-  ``std::unique_ptr<>`` deleting through a non-virtual dtor is now diagnosed.
-
-- ``-Wunreachable-code`` can now reason about ``__try``, ``__except`` and
-  ``__leave``.
-
+* For the RISC-V target, floating point registers can now be used in inline
+  assembly constraints.
 
 New Compiler Flags
 ------------------
 
-- Clang supports the ``-mretpoline`` flag to enable `retpolines
-  <https://support.google.com/faqs/answer/7625886>`_. Code compiled with this
-  flag will be hardened against variant #2 of the Spectre attack. Indirect
-  branches from switches or gotos removed from the code, and indirect calls
-  will be made through a "retpoline" thunk. The necessary thunks will
-  automatically be inserted into the generated code. Clang also supports
-  ``-mretpoline-external-thunk`` which works like ``-mretpoline`` but requires
-  the user to provide their own thunk definitions. The external thunk names
-  start with ``__x86_indirect_thunk_`` and end in a register name. For 64-bit
-  platforms, only an ``r11`` thunk is used, but for 32-bit platforms ``eax``,
-  ``ecx``, ``edx``, and ``edi`` thunks are used.
+- The ``-fgnuc-version=`` flag now controls the value of ``__GNUC__`` and related
+  macros. This flag does not enable or disable any GCC extensions implemented in
+  Clang. Setting the version to zero causes Clang to leave ``__GNUC__`` and
+  other GNU-namespaced macros, such as ``__GXX_WEAK__``, undefined.
 
-- Clang now supports configuration files. These are collections of driver
-  options, which can be applied by specifying the configuration file, either
-  using command line option ``--config foo.cfg`` or encoding it into executable
-  name ``foo-clang``. Clang behaves as if the options from this file were inserted
-  before the options specified in command line. This feature is primary intended
-  to facilitate cross compilation. Details can be found in
-  `Clang Compiler User's Manual <UsersManual.html#configuration-files>`_.
+- vzeroupper insertion on X86 targets can now be disabled with ``-mno-vzeroupper``.
+  You can also force vzeroupper insertion to be used on CPUs that normally
+  wouldn't with ``-mvzeroupper``.
 
-- The ``-fdouble-square-bracket-attributes`` and corresponding
-  ``-fno-double-square-bracket-attributes`` flags were added to enable or
-  disable ``[[]]`` attributes in any language mode. Currently, only a limited
-  number of attributes are supported outside of C++ mode. See the Clang
-  `attribute documentation <AttributeReference.html>`_ for more information
-  about which attributes are supported for each syntax.
+- The ``-fno-concept-satisfaction-caching`` can be used to disable caching for
+  satisfactions of Concepts. The C++2a draft standard does not currently permit
+  this caching, but disabling it may incur significant compile-time costs. This
+  flag is intended for experimentation purposes and may be removed at any time;
+  please let us know if you encounter a situation where you need to specify this
+  flag for correct program behavior.
 
-- Added the ``-std=c17``, ``-std=gnu17``, and ``-std=iso9899:2017`` language
-  mode flags for compatibility with GCC. This enables support for the next
-  version of the C standard, expected to be published by ISO in 2018. The only
-  difference between the ``-std=c17`` and ``-std=c11`` language modes is the
-  value of the ``__STDC_VERSION__`` macro, as C17 is a bug fix release.
+- The ``-ffixed-xX`` flags now work on RISC-V. These reserve the corresponding
+  general-purpose registers.
 
-- Added the ``-fexperimental-isel`` and ``-fno-experimental-isel`` flags to
-  enable/disable the new GlobalISel instruction selection framework. This
-  feature is enabled by default for AArch64 at the ``-O0`` optimization level.
-  Support for other targets or optimization levels is currently incomplete.
+- RISC-V has added ``-mcmodel=medany`` and ``-mcmodel=medlow`` as aliases for
+  ``-mcmodel=small`` and ``-mcmodel=medium`` respectively. Preprocessor definitions
+  for ``__riscv_cmodel_medlow`` and ``__riscv_cmodel_medany`` have been corrected.
 
-- New ``-nostdlib++`` flag to disable linking the C++ standard library. Similar
-  to using ``clang`` instead of ``clang++`` but doesn't disable ``-lm``.
+- ``-fmacro-prefix-map=OLD=NEW`` substitutes directory prefix ``OLD`` for
+  ``NEW`` in predefined preprocessor macros such as ``__FILE__``. This helps
+  with reproducible builds that are location independent. The new
+  ``-ffile-prefix-map`` option is equivalent to specifying both
+  ``-fdebug-prefix-map`` and ``-fmacro-prefix-map``.
 
+- ``-fpatchable-function-entry=N[,M]`` is added to generate M NOPs before the
+  function entry and N-M NOPs after the function entry. This is used by AArch64
+  ftrace in the Linux kernel.
+
+- ``-mbranches-within-32B-boundaries`` is added as an x86 assembler mitigation
+  for Intel's Jump Condition Code Erratum.
+
+Deprecated Compiler Flags
+-------------------------
+
+The following options are deprecated and ignored. They will be removed in
+future versions of Clang.
+
+- ``-mmpx`` used to enable the ``__MPX__`` preprocessor define for the Intel MPX
+  instructions. There were no MPX intrinsics.
+
+- ``-mno-mpx`` used to disable ``-mmpx`` and is the default behavior.
+
+- ``-fconcepts-ts`` previously used to enable experimental concepts support. Use
+  -std=c++2a instead to enable Concepts support.
+
+Modified Compiler Flags
+-----------------------
+
+- RISC-V now sets the architecture (riscv32/riscv64) based on the value provided
+  to the ``-march`` flag, overriding the target provided by ``-triple``.
+
+- ``-flax-vector-conversions`` has been split into three different levels of
+  laxness, and has been updated to match the GCC semantics:
+
+  - ``-flax-vector-conversions=all``: This is Clang's current default, and
+    permits implicit vector conversions (performed as bitcasts) between any
+    two vector types of the same overall bit-width.
+    Former synonym: ``-flax-vector-conversions`` (Clang <= 9).
+
+  - ``-flax-vector-conversions=integer``: This permits implicit vector
+    conversions (performed as bitcasts) between any two integer vector types of
+    the same overall bit-width.
+    Synonym: ``-flax-vector-conversions`` (Clang >= 10).
+
+  - ``-flax-vector-conversions=none``: Do not perform any implicit bitcasts
+    between vector types.
+    Synonym: ``-fno-lax-vector-conversions``.
+
+- ``-debug-info-kind`` now has an option ``-debug-info-kind=constructor``,
+  which is one level below ``-debug-info-kind=limited``. This option causes
+  debug info for classes to be emitted only when a constructor is emitted.
+
+- RISC-V now chooses a slightly different sysroot path and defaults to using
+  compiler-rt if no GCC installation is detected.
+
+- RISC-V now supports multilibs in baremetal environments. This support does not
+  extend to supporting multilib aliases.
 
 Attribute Changes in Clang
 --------------------------
 
-- Clang now supports the majority of its attributes under both the GNU-style
-  spelling (``__attribute((name))``) and the double square-bracket spelling
-  in the ``clang`` vendor namespace (``[[clang::name]]``). Attributes whose
-  syntax is specified by some other standard (such as CUDA and OpenCL
-  attributes) continue to follow their respective specification.
-
-- Added the ``__has_c_attribute()`` builtin preprocessor macro which allows
-  users to dynamically detect whether a double square-bracket attribute is
-  supported in C mode. This attribute syntax can be enabled with the
-  ``-fdouble-square-bracket-attributes`` flag.
-
-- The presence of ``__attribute__((availability(...)))`` on a declaration no
-  longer implies default visibility for that declaration on macOS.
-
+- Support was added for function ``__attribute__((target("branch-protection=...")))``
 
 Windows Support
 ---------------
 
-- Clang now has initial, preliminary support for targeting Windows on
-  ARM64.
+- Previous Clang versions contained a work-around to avoid an issue with the
+  standard library headers in Visual Studio 2019 versions prior to 16.3. This
+  work-around has now been removed, and users of Visual Studio 2019 are
+  encouraged to upgrade to 16.3 or later, otherwise they may see link errors as
+  below:
 
-- clang-cl now exposes the ``--version`` flag.
+  .. code-block:: console
+
+    error LNK2005: "bool const std::_Is_integral<int>" (??$_Is_integral@H@std@@3_NB) already defined
+
+- The ``.exe`` output suffix is now added implicitly in MinGW mode, when
+  Clang is running on Windows (matching GCC's behaviour)
+
+- Fixed handling of TLS variables that are shared between object files
+  in MinGW environments
+
+- The ``-cfguard`` flag now emits Windows Control Flow Guard checks on indirect
+  function calls. The previous behavior is still available with the
+  ``-cfguard-nochecks`` flag. These checks can be disabled for specific
+  functions using the new ``__declspec(guard(nocf))`` modifier.
 
 
 C++ Language Changes in Clang
 -----------------------------
 
-- Clang's default C++ dialect is now ``gnu++14`` instead of ``gnu++98``. This
-  means Clang will by default accept code using features from C++14 and
-  conforming GNU extensions. Projects incompatible with C++14 can add
-  ``-std=gnu++98`` to their build settings to restore the previous behaviour.
+- The behaviour of the `gnu_inline` attribute now matches GCC, for cases
+  where used without the `extern` keyword. As this is a change compared to
+  how it behaved in previous Clang versions, a warning is emitted for this
+  combination.
 
-- Added support for some features from the C++ standard after C++17
-  (provisionally known as C++2a but expected to be C++20). This support can be
-  enabled with the ``-std=c++2a`` flag. This enables:
+Objective-C Language Changes in Clang
+-------------------------------------
 
-  - Support for ``__VA_OPT__``, to allow variadic macros to easily provide
-    different expansions when they are invoked without variadic arguments.
+- In both Objective-C and
+  Objective-C++, ``-Wcompare-distinct-pointer-types`` will now warn when
+  comparing ObjC ``Class`` with an ObjC instance type pointer.
 
-  - Recognition of the ``<=>`` token (the C++2a three-way comparison operator).
+  .. code-block:: objc
 
-  - Support for default member initializers for bit-fields.
+    Class clz = ...;
+    MyType *instance = ...;
+    bool eq = (clz == instance); // Previously undiagnosed, now warns.
 
-  - Lambda capture of ``*this``.
+- Objective-C++ now diagnoses conversions between ``Class`` and ObjC
+  instance type pointers. Such conversions already emitted an
+  on-by-default ``-Wincompatible-pointer-types`` warning in Objective-C
+  mode, but had inadvertently been missed entirely in
+  Objective-C++. This has been fixed, and they are now diagnosed as
+  errors, consistent with the usual C++ treatment for conversions
+  between unrelated pointer types.
 
-  - Pointer-to-member calls using ``const &``-qualified pointers on temporary objects.
+  .. code-block:: objc
 
-  All of these features other than ``__VA_OPT__`` and ``<=>`` are made
-  available with a warning in earlier C++ language modes.
+    Class clz = ...;
+    MyType *instance = ...;
+    clz = instance; // Previously undiagnosed, now an error.
+    instance = clz; // Previously undiagnosed, now an error.
 
-- A warning has been added for a ``<=`` token followed immediately by a ``>``
-  character. Code containing such constructs will change meaning in C++2a due
-  to the addition of the ``<=>`` operator.
+  One particular issue you may run into is attempting to use a class
+  as a key in a dictionary literal. This will now result in an error,
+  because ``Class`` is not convertible to ``id<NSCopying>``. (Note that
+  this was already a warning in Objective-C mode.) While an arbitrary
+  ``Class`` object is not guaranteed to implement ``NSCopying``, the
+  default metaclass implementation does. Therefore, the recommended
+  solution is to insert an explicit cast to ``id``, which disables the
+  type-checking here.
 
-- Clang implements the "destroying operator delete" feature described in C++
-  committee paper `P0722R1
-  <http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/p0722r1.html>`,
-  which is targeting inclusion in C++2a but has not yet been voted into the C++
-  working draft. Support for this feature is enabled by the presence of the
-  standard library type ``std::destroying_delete_t``.
+ .. code-block:: objc
 
-OpenCL C Language Changes in Clang
-----------------------------------
+    Class cls = ...;
 
-- Added subgroup builtins to enqueue kernel support.
+    // Error: cannot convert from Class to id<NSCoding>.
+    NSDictionary* d = @{cls : @"Hello"};
 
-- Added CL2.0 atomics as Clang builtins that now accept
-  an additional memory scope parameter propagated to atomic IR instructions
-  (this is to align with the corresponding change in LLVM IR) (see `spec s6.13.11.4
-  <https://www.khronos.org/registry/OpenCL/specs/opencl-2.0-openclc.pdf#107>`_).
+    // Fix: add an explicit cast to 'id'.
+    NSDictionary* d = @{(id)cls : @"Hello"};
 
-- Miscellaneous fixes in the CL header.
+OpenCL Kernel Language Changes in Clang
+---------------------------------------
 
-- Allow per target selection of address space during CodeGen of certain OpenCL types.
-  Default target implementation is provided mimicking old behavior.
+Generic changes:
 
-- Macro ``__IMAGE_SUPPORT__`` is now automatically added (as per `spec s6.10
-  <https://www.khronos.org/registry/OpenCL/specs/opencl-2.0-openclc.pdf#55>`_).
+- Made ``__private`` to be appear explicitly in diagnostics, AST, etc.
+- Fixed diagnostics of ``enqueue_kernel``.
 
-- Added ``cl_intel_subgroups`` and ``cl_intel_subgroups_short`` extensions.
+OpenCL builtin functions:
 
-- All function calls are marked by `the convergent attribute
-  <https://clang.llvm.org/docs/AttributeReference.html#convergent-clang-convergent>`_
-  to prevent optimizations that break SPMD program semantics. This will be removed
-  by LLVM passes if it can be proved that the function does not use convergent
-  operations.
+- The majority of the OpenCL builtin functions are now available through
+  the experimental `TableGen` driven ``-fdeclare-opencl-builtins`` option.
+- Align the ``enqueue_marker`` declaration in standard ``opencl-c.h`` to the
+  OpenCL spec.
+- Avoid a void pointer cast in the ``CLK_NULL_EVENT`` definition.
+- Aligned OpenCL with c11 atomic fetch max/min.
 
-- Create a kernel wrapper for enqueued blocks, which simplifies enqueue support by
-  providing common functionality.
+Changes in C++ for OpenCL:
 
-- Added private address space explicitly in AST and refactored address space support
-  with several simplifications and bug fixes (`PR33419 <https://llvm.org/pr33419>`_
-  and `PR33420 <https://llvm.org/pr33420>`_).
+- Fixed language mode predefined macros for C++ mode.
+- Allow OpenCL C style compound vector initialization.
+- Improved destructor support.
+- Implemented address space deduction for pointers/references
+  to arrays and auto variables.
+- Added address spaces support for lambdas and ``constexpr``.
+- Fixed misc address spaces usages in classes.
 
-- OpenCL now allows functions with empty parameters to be treated as if they had a
-  void parameter list (inspired from C++ support). OpenCL C spec update to follow.
 
-- General miscellaneous refactoring and cleanup of blocks support for OpenCL to
-  remove unused parts inherited from Objective C implementation.
+ABI Changes in Clang
+--------------------
 
-- Miscellaneous improvements in vector diagnostics.
+- GCC passes vectors of __int128 in memory on X86-64. Clang historically
+  broke the vectors into multiple scalars using two 64-bit values for each
+  element. Clang now matches the GCC behavior on Linux and NetBSD. You can
+  switch back to old API behavior with flag: ``-fclang-abi-compat=9.0``.
 
-- Added half float load and store builtins without enabling half as a legal type
-  (``__builtin_store_half`` for double, ``__builtin_store_halff`` for float,
-  ``__builtin_load_half`` for double, ``__builtin_load_halff`` for float).
+- RISC-V now chooses a default ``-march=`` and ``-mabi=`` to match (in almost
+  all cases) the GCC defaults. On baremetal targets, where neither ``-march=``
+  nor ``-mabi=`` are specified, Clang now differs from GCC by defaulting to
+  ``-march=rv32imac`` ``-mabi=ilp32`` or ``-march=rv64imac`` ``-mabi=lp64``
+  depending on the architecture in the target triple. These do not always match
+  the defaults in Clang 9. We strongly suggest that you explicitly pass
+  ``-march=`` and ``-mabi=`` when compiling for RISC-V, due to how extensible
+  this architecture is.
 
+- RISC-V now uses `target-abi` module metadata to encode the chosen psABI. This
+  ensures that the correct lowering will be done by LLVM when LTO is enabled.
+
+- An issue with lowering return types in the RISC-V ILP32D psABI has been fixed.
 
 OpenMP Support in Clang
-----------------------------------
+-----------------------
 
-- Added options ``-f[no]-openmp-simd`` that support code emission only for OpenMP
-  SIMD-based directives, like ``#pragma omp simd``, ``#pragma omp parallel for simd``
-  etc. The code is emitted only for SIMD-based part of the combined directives
-  and clauses.
+New features for OpenMP 5.0 were implemented. Use ``-fopenmp-version=50`` option to activate support for OpenMP 5.0.
 
-- Added support for almost all target-based directives except for
-  ``#pragma omp target teams distribute parallel for [simd]``. Although, please
-  note that ``depend`` clauses on target-based directives are not supported yet.
-  Clang supports offloading to X86_64, AArch64 and PPC64[LE] devices.
+- Added support for ``device_type`` clause in declare target directive.
+- Non-static and non-ordered loops are nonmonotonic by default.
+- Teams-based directives can be used as a standalone directive.
+- Added support for collapsing of non-rectangular loops.
+- Added support for range-based loops.
+- Added support for collapsing of imperfectly nested loops.
+- Added support for ``master taskloop``, ``parallel master taskloop``, ``master taskloop simd`` and ``parallel master taskloop simd`` directives.
+- Added support for ``if`` clauses in simd-based directives.
+- Added support for unified shared memory for NVPTX target.
+- Added support for nested atomic and simd directives are allowed in sims-based directives.
+- Added support for non temporal clauses in sims-based directives.
+- Added basic support for conditional lastprivate variables
 
-- Added support for ``reduction``-based clauses on ``task``-based directives from
-  upcoming OpenMP 5.0.
+Other improvements:
 
-- The LLVM OpenMP runtime ``libomp`` now supports the OpenMP Tools Interface (OMPT)
-  on x86, x86_64, AArch64, and PPC64 on Linux, Windows, and macOS. If you observe
-  a measurable performance impact on one of your applications without a tool
-  attached, please rebuild the runtime library with ``-DLIBOMP_OMPT_SUPPORT=OFF`` and
-  file a bug at `LLVM's Bugzilla <https://bugs.llvm.org/>`_ or send a message to the
-  `OpenMP development list <http://lists.llvm.org/cgi-bin/mailman/listinfo/openmp-dev>`_.
+- Added basic analysis for use of the uninitialized variables in clauses.
+- Bug fixes.
 
 
-AST Matchers
-------------
+Internal API Changes
+--------------------
 
-The ``hasDeclaration`` matcher now works the same for ``Type`` and ``QualType`` and only
-ever looks through one level of sugaring in a limited number of cases.
+These are major API changes that have happened since the 9.0.0 release of
+Clang. If upgrading an external codebase that uses Clang as a library,
+this section should help get you past the largest hurdles of upgrading.
 
-There are two main patterns affected by this:
+- libTooling APIs that transfer ownership of `FrontendAction` objects now pass
+  them by `unique_ptr`, making the ownership transfer obvious in the type
+  system. `FrontendActionFactory::create()` now returns a
+  `unique_ptr<FrontendAction>`. `runToolOnCode`, `runToolOnCodeWithArgs`,
+  `ToolInvocation::ToolInvocation()` now take a `unique_ptr<FrontendAction>`.
 
--  ``qualType(hasDeclaration(recordDecl(...)))``: previously, we would look through
-   sugar like ``TypedefType`` to get at the underlying ``recordDecl``; now, we need
-   to explicitly remove the sugaring:
-   ``qualType(hasUnqualifiedDesugaredType(hasDeclaration(recordDecl(...))))``
+Build System Changes
+--------------------
 
--  ``hasType(recordDecl(...))``: ``hasType`` internally uses ``hasDeclaration``; previously,
-   this matcher used to match for example ``TypedefTypes`` of the ``RecordType``, but
-   after the change they don't; to fix, use:
+These are major changes to the build system that have happened since the 9.0.0
+release of Clang. Users of the build system should adjust accordingly.
 
-   .. code-block:: c
+- In 8.0.0 and below, the install-clang-headers target would install clang's
+  resource directory headers. This installation is now performed by the
+  install-clang-resource-headers target. Users of the old install-clang-headers
+  target should switch to the new install-clang-resource-headers target. The
+  install-clang-headers target now installs clang's API headers (corresponding
+  to its libraries), which is consistent with the install-llvm-headers target.
 
-      hasType(hasUnqualifiedDesugaredType(
-          recordType(hasDeclaration(recordDecl(...)))))
-
--  ``templateSpecializationType(hasDeclaration(classTemplateDecl(...)))``:
-   previously, we would directly match the underlying ``ClassTemplateDecl``;
-   now, we can explicitly match the ``ClassTemplateSpecializationDecl``, but that
-   requires to explicitly get the ``ClassTemplateDecl``:
-
-   .. code-block:: c
-
-      templateSpecializationType(hasDeclaration(
-          classTemplateSpecializationDecl(
-              hasSpecializedTemplate(classTemplateDecl(...)))))
+- In 9.0.0 and later Clang added a new target, clang-cpp, which generates a
+  shared library comprised of all the clang component libraries and exporting
+  the clang C++ APIs. Additionally the build system gained the new
+  "CLANG_LINK_CLANG_DYLIB" option, which defaults Off, and when set to On, will
+  force clang (and clang-based tools) to link the clang-cpp library instead of
+  statically linking clang's components. This option will reduce the size of
+  binary distributions at the expense of compiler performance.
 
 
 clang-format
 ------------
 
-* Option ``IndentPPDirectives`` added to indent preprocessor directives on
-  conditionals.
+- The ``Standard`` style option specifies which version of C++ should be used
+  when parsing and formatting C++ code. The set of allowed values has changed:
 
-  +----------------------+----------------------+
-  | Before               | After                |
-  +======================+======================+
-  |  .. code-block:: c++ | .. code-block:: c++  |
-  |                      |                      |
-  |    #if FOO           |   #if FOO            |
-  |    #if BAR           |   #  if BAR          |
-  |    #include <foo>    |   #    include <foo> |
-  |    #endif            |   #  endif           |
-  |    #endif            |   #endif             |
-  +----------------------+----------------------+
+  - ``Latest`` will always enable new C++ language features.
+  - ``c++03``, ``c++11``, ``c++14``, ``c++17``, ``c++20`` will pin to exactly
+    that language version.
+  - ``Auto`` is the default and detects style from the code (this is unchanged).
 
-* Option ``-verbose`` added to the command line.
-  Shows the list of processed files.
+  The previous values of ``Cpp03`` and ``Cpp11`` are deprecated. Note that
+  ``Cpp11`` is treated as ``Latest``, as this was always clang-format's
+  behavior. (One motivation for this change is the new name describes the
+  behavior better).
 
-* Option ``IncludeBlocks`` added to merge and regroup multiple ``#include`` blocks during sorting.
+- Clang-format has a new option called ``--dry-run`` or ``-n`` to emit a
+  warning for clang-format violations. This can be used together
+  with ``--ferror-limit=N`` to limit the number of warnings per file and ``--Werror``
+  to make warnings into errors.
 
-  +-------------------------+-------------------------+-------------------------+
-  | Before (Preserve)       | Merge                   | Regroup                 |
-  +=========================+=========================+=========================+
-  |  .. code-block:: c++    | .. code-block:: c++     | .. code-block:: c++     |
-  |                         |                         |                         |
-  |   #include "b.h"        |   #include "a.h"        |   #include "a.h"        |
-  |                         |   #include "b.h"        |   #include "b.h"        |
-  |   #include "a.b"        |   #include <lib/main.h> |                         |
-  |   #include <lib/main.h> |                         |   #include <lib/main.h> |
-  +-------------------------+-------------------------+-------------------------+
+- Option *IncludeIsMainSourceRegex* has been added to allow for additional
+  suffixes and file extensions to be considered as a source file
+  for execution of logic that looks for "main *include* file" to put
+  it on top.
+
+  By default, clang-format considers *source* files as "main" only when
+  they end with: ``.c``, ``.cc``, ``.cpp``, ``.c++``, ``.cxx``,
+  ``.m`` or ``.mm`` extensions. This config option allows to
+  extend this set of source files considered as "main".
+
+  For example, if this option is configured to ``(Impl\.hpp)$``,
+  then a file ``ClassImpl.hpp`` is considered "main" (in addition to
+  ``Class.c``, ``Class.cc``, ``Class.cpp`` and so on) and "main
+  include file" logic will be executed (with *IncludeIsMainRegex* setting
+  also being respected in later phase). Without this option set,
+  ``ClassImpl.hpp`` would not have the main include file put on top
+  before any other include.
+
+- Options ``DeriveLineEnding`` and  ``UseCRLF`` have been added to allow
+  clang-format to control the newlines. ``DeriveLineEnding`` is by default
+  ``true`` and reflects is the existing mechanism, which based is on majority
+  rule. The new options allows this to be turned off and ``UseCRLF`` to control
+  the decision as to which sort of line ending to use.
+
+- Option ``SpaceBeforeSquareBrackets`` has been added to insert a space before
+  array declarations.
+
+  .. code-block:: c++
+
+    int a [5];    vs    int a[5];
+
+- Clang-format now supports JavaScript null operators.
+
+  .. code-block:: c++
+
+    const x = foo ?? default;
+    const z = foo?.bar?.baz;
+
+- Option ``AlwaysBreakAfterReturnType`` now manages all operator functions.
+
+libclang
+--------
+
+- Various changes to reduce discrepancies in destructor calls between the
+  generated ``CFG`` and the actual ``codegen``.
+
+  In particular:
+
+  - Respect C++17 copy elision; previously it would generate destructor calls
+    for elided temporaries, including in initialization and return statements.
+
+  - Don't generate duplicate destructor calls for statement expressions.
+
+  - Fix initialization lists.
+
+  - Fix comma operator.
+
+  - Change printing of implicit destructors to print the type instead of the
+    class name directly, matching the code for temporary object destructors.
+    The class name was blank for lambdas.
 
 
 Static Analyzer
 ---------------
 
-- The Static Analyzer can now properly detect and diagnose unary pre-/post-
-  increment/decrement on an uninitialized value.
+- New checker: ``alpha.cplusplus.PlacementNew`` to detect whether the storage
+  provided for default placement new is sufficiently large.
 
+- New checker: ``fuchsia.HandleChecker`` to detect leaks related to Fuchsia
+  handles.
+
+- New checker: ``security.insecureAPI.decodeValueOfObjCType`` warns about
+  potential buffer overflows when using ``[NSCoder decodeValueOfObjCType:at:]``
+
+- ``deadcode.DeadStores`` now warns about nested dead stores.
+
+- Condition values that are relevant to the occurrence of a bug are far better
+  explained in bug reports.
+
+- Despite still being at an alpha stage, checkers implementing taint analyses
+  and C++ iterator rules were improved greatly.
+
+- Numerous smaller fixes.
+
+.. _release-notes-ubsan:
 
 Undefined Behavior Sanitizer (UBSan)
 ------------------------------------
 
-* A minimal runtime is now available. It is suitable for use in production
-  environments, and has a small attack surface. It only provides very basic
-  issue logging and deduplication, and does not support ``-fsanitize=vptr``
-  checking.
+* The ``pointer-overflow`` check was extended added to catch the cases where
+  a non-zero offset is applied to a null pointer, or the result of
+  applying the offset is a null pointer.
+
+  .. code-block:: c++
+
+    #include <cstdint> // for intptr_t
+
+    static char *getelementpointer_inbounds(char *base, unsigned long offset) {
+      // Potentially UB.
+      return base + offset;
+    }
+
+    char *getelementpointer_unsafe(char *base, unsigned long offset) {
+      // Always apply offset. UB if base is ``nullptr`` and ``offset`` is not
+      // zero, or if ``base`` is non-``nullptr`` and ``offset`` is
+      // ``-reinterpret_cast<intptr_t>(base)``.
+      return getelementpointer_inbounds(base, offset);
+    }
+
+    char *getelementpointer_safe(char *base, unsigned long offset) {
+      // Cast pointer to integer, perform usual arithmetic addition,
+      // and cast to pointer. This is legal.
+      char *computed =
+          reinterpret_cast<char *>(reinterpret_cast<intptr_t>(base) + offset);
+      // If either the pointer becomes non-``nullptr``, or becomes
+      // ``nullptr``, we must use ``computed`` result.
+      if (((base == nullptr) && (computed != nullptr)) ||
+          ((base != nullptr) && (computed == nullptr)))
+        return computed;
+      // Else we can use ``getelementpointer_inbounds()``.
+      return getelementpointer_inbounds(base, offset);
+    }
+
+Changes deferred to Clang-11 release
+------------------------------------
+
+- The next release of clang (clang-11) will upgrade the default C language
+  standard used if not specified via command line from gnu11 to gnu17.
 
 
 Additional Information
 ======================
 
 A wide variety of additional information is available on the `Clang web
-page <http://clang.llvm.org/>`_. The web page contains versions of the
-API documentation which are up-to-date with the Subversion version of
+page <https://clang.llvm.org/>`_. The web page contains versions of the
+API documentation which are up-to-date with the Git version of
 the source code. You can access versions of these documents specific to
 this release by going into the "``clang/docs/``" directory in the Clang
 tree.
 
 If you have any questions or comments about Clang, please feel free to
 contact us via the `mailing
-list <http://lists.llvm.org/mailman/listinfo/cfe-dev>`_.
+list <https://lists.llvm.org/mailman/listinfo/cfe-dev>`_.

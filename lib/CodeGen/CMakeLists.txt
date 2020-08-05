@@ -5,8 +5,10 @@ set(LLVM_LINK_COMPONENTS
   Core
   Coroutines
   Coverage
+  FrontendOpenMP
   IPO
   IRReader
+  AggressiveInstCombine
   InstCombine
   Instrumentation
   LTO
@@ -16,6 +18,7 @@ set(LLVM_LINK_COMPONENTS
   Object
   Passes
   ProfileData
+  Remarks
   ScalarOpts
   Support
   Target
@@ -29,6 +32,10 @@ set(LLVM_LINK_COMPONENTS
 set(codegen_deps intrinsics_gen)
 if (CLANG_BUILT_STANDALONE)
   set(codegen_deps)
+endif()
+
+if (MSVC)
+  set_source_files_properties(CodeGenModule.cpp PROPERTIES COMPILE_FLAGS /bigobj)
 endif()
 
 add_clang_library(clangCodeGen
@@ -56,6 +63,7 @@ add_clang_library(clangCodeGen
   CGExprScalar.cpp
   CGGPUBuiltin.cpp
   CGLoopInfo.cpp
+  CGNonTrivialStruct.cpp
   CGObjC.cpp
   CGObjCGNU.cpp
   CGObjCMac.cpp
@@ -82,10 +90,13 @@ add_clang_library(clangCodeGen
   MicrosoftCXXABI.cpp
   ModuleBuilder.cpp
   ObjectFilePCHContainerOperations.cpp
+  PatternInit.cpp
   SanitizerMetadata.cpp
   SwiftCallingConv.cpp
   TargetInfo.cpp
   VarBypassDetector.cpp
+
+  ENABLE_PLUGINS
 
   DEPENDS
   ${codegen_deps}
@@ -93,8 +104,9 @@ add_clang_library(clangCodeGen
   LINK_LIBS
   clangAnalysis
   clangAST
-  clangAnalysis
+  clangASTMatchers
   clangBasic
   clangFrontend
   clangLex
+  clangSerialization
   )

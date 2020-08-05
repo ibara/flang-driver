@@ -211,7 +211,7 @@ namespace smart_ptr {
   // expected-note@-2 {{candidate constructor (the implicit move constructor) not}}
 #endif
 
-    explicit X(Y);
+    explicit X(Y); // expected-note {{not a candidate}}
   };
 
   Y make_Y();
@@ -443,4 +443,14 @@ namespace PR18234 {
   A::E e = a;
   bool k1 = e == A::e; // expected-error {{no member named 'e'}}
   bool k2 = e.n == 0;
+}
+
+namespace PR30595 {
+struct S {
+  const operator int(); // expected-error {{cannot specify any part of a return type in the declaration of a conversion function; put the complete type after 'operator'}}
+  const operator int() const; // expected-error {{cannot specify any part of a return type}}
+  volatile const operator int(); // expected-error {{cannot specify any part of a return type}}
+
+  operator const int() const;
+};
 }

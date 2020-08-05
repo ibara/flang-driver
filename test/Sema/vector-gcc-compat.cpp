@@ -86,7 +86,7 @@ void logicTest(void) {
   v2i64_r = !v2i64_a;  // expected-error {{invalid argument type 'v2i64' (vector of 2 'long long' values) to unary expression}}
   v2i64_r = ~v2i64_a;
 
-  v2i64_r = v2i64_a ? v2i64_b : v2i64_c; // expected-error {{value of type 'v2i64' (vector of 2 'long long' values) is not contextually convertible to 'bool'}}
+  v2i64_r = v2i64_a ? v2i64_b : v2i64_c;
 
   v2i64_r = v2i64_a & 1;
   v2i64_r = v2i64_a | 1;
@@ -112,7 +112,7 @@ void logicTest(void) {
   v2i64_a >>= 1;
 }
 
-// For operations with floating point types, we check that interger constants
+// For operations with floating point types, we check that integer constants
 // can be respresented, or failing that checking based on the integer types.
 void floatTestConstant(void) {
   // Test that constants added to floats must be expressible as floating point
