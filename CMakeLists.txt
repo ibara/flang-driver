@@ -458,6 +458,11 @@ endif()
 
 add_definitions( -D_GNU_SOURCE )
 
+option(FLANG_LLVM_EXTENSIONS "enable the Flang LLVM extensions" OFF)
+if(FLANG_LLVM_EXTENSIONS)
+  add_definitions( -DFLANG_LLVM_EXTENSIONS )
+endif()
+
 option(CLANG_BUILD_TOOLS
   "Build the Clang tools. If OFF, just generate build targets." ON)
 

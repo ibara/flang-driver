@@ -152,7 +152,7 @@ static const DriverSuffix *FindDriverSuffix(StringRef ProgName, size_t &Pos) {
       {"cpp", "--driver-mode=cpp"},
       {"cl", "--driver-mode=cl"},
       {"++", "--driver-mode=g++"},
-      {"flang", "--driver-mode=flang"},
+      {"flang", "--driver-mode=fortran"},
   };
 
   for (size_t i = 0; i < llvm::array_lengthof(DriverSuffixes); ++i) {
@@ -256,12 +256,6 @@ Tool *ToolChain::getClang() const {
   return Clang.get();
 }
 
-Tool *ToolChain::getFlang() const {
-  if (!Flang)
-    Flang.reset(new tools::Flang(*this));
-  return Flang.get();
-}
-
 Tool *ToolChain::buildAssembler() const {
   return new tools::ClangAs(*this);
 }
@@ -274,6 +268,12 @@ Tool *ToolChain::getAssemble() const {
   if (!Assemble)
     Assemble.reset(buildAssembler());
   return Assemble.get();
+}
+
+Tool *ToolChain::getFlangFrontend() const {
+  if (!FlangFrontend)
+    FlangFrontend.reset(new tools::FlangFrontend(*this));
+  return FlangFrontend.get();
 }
 
 Tool *ToolChain::getClangAs() const {
@@ -341,6 +341,9 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
 
   case Action::OffloadWrapperJobClass:
     return getOffloadWrapper();
+
+  case Action::FortranFrontendJobClass:
+    return getFlangFrontend();
   }
 
   llvm_unreachable("Invalid tool kind.");
@@ -501,7 +504,7 @@ bool ToolChain::needsGCovInstrumentation(const llvm::opt::ArgList &Args) {
 }
 
 Tool *ToolChain::SelectTool(const JobAction &JA) const {
-  if (D.IsFlangMode() && getDriver().ShouldUseFlangCompiler(JA)) return getFlang();
+  if (D.IsFlangMode() && getDriver().ShouldUseFlangCompiler(JA)) return getFlangFrontend();
   if (getDriver().ShouldUseClangCompiler(JA)) return getClang();
   Action::ActionClass AC = JA.getKind();
   if (AC == Action::AssembleJobClass && useIntegratedAs())
@@ -555,8 +558,6 @@ types::ID ToolChain::LookupTypeForExtension(StringRef Ext) const {
   // Flang always runs the preprocessor and has no notion of "preprocessed
   // fortran". Here, TY_PP_Fortran is coerced to TY_Fortran to avoid treating
   // them differently.
-  if (D.IsFlangMode() && id == types::TY_PP_Fortran)
-    id = types::TY_Fortran;
 
   return id;
 }
@@ -913,6 +914,50 @@ void ToolChain::AddFilePathLibArgs(const ArgList &Args,
 void ToolChain::AddCCKextLibArgs(const ArgList &Args,
                                  ArgStringList &CmdArgs) const {
   CmdArgs.push_back("-lcc_kext");
+}
+
+void ToolChain::AddFortranStdlibLibArgs(const ArgList &Args,
+                                    ArgStringList &CmdArgs) const {
+ bool staticFlangLibs = false;
+ bool useOpenMP = false;
+
+  if (Args.hasArg(options::OPT_staticFlangLibs)) {
+    for (auto *A: Args.filtered(options::OPT_staticFlangLibs)) {
+      A->claim();
+      staticFlangLibs = true;
+    }
+  }
+
+  Arg *A = Args.getLastArg(options::OPT_mp, options::OPT_nomp,
+                           options::OPT_fopenmp, options::OPT_fno_openmp);
+  if (A &&
+      (A->getOption().matches(options::OPT_mp) ||
+       A->getOption().matches(options::OPT_fopenmp))) {
+      useOpenMP = true;
+  }
+
+  if (staticFlangLibs) {
+    CmdArgs.push_back("-Bstatic");
+  }
+  CmdArgs.push_back("-lflang");
+  CmdArgs.push_back("-lflangrti");
+  CmdArgs.push_back("-lpgmath");
+  if( useOpenMP ) {
+    CmdArgs.push_back("-lomp");
+  }
+  else {
+    CmdArgs.push_back("-lompstub");
+  }
+  if( staticFlangLibs ) {
+    CmdArgs.push_back("-Bdynamic");
+  }
+
+  CmdArgs.push_back("-lm");
+  CmdArgs.push_back("-lrt");
+
+  // Allways link Fortran executables with Pthreads
+  CmdArgs.push_back("-lpthread");
+
 }
 
 bool ToolChain::AddFastMathRuntimeIfAvailable(const ArgList &Args,

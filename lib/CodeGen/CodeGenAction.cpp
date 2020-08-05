@@ -1165,6 +1165,24 @@ void CodeGenAction::ExecuteAction() {
     std::unique_ptr<llvm::ToolOutputFile> OptRecordFile =
         std::move(*OptRecordFileOrErr);
 
+    DiagnosticsEngine &Diags = CI.getDiagnostics();
+
+    if (!CodeGenOpts.OptRecordFile.empty()) {
+      std::error_code EC;
+      OptRecordFile =
+        std::make_unique<llvm::ToolOutputFile>(CodeGenOpts.OptRecordFile,
+                                                EC, sys::fs::F_None);
+
+      if (EC) {
+        Diags.Report(diag::err_cannot_open_file) <<
+          CodeGenOpts.OptRecordFile << EC.message();
+        return;
+      }
+
+      if (CodeGenOpts.getProfileUse() != CodeGenOptions::ProfileNone)
+        Ctx.setDiagnosticsHotnessRequested(true);
+    }
+
     EmitBackendOutput(Diagnostics, CI.getHeaderSearchOpts(), CodeGenOpts,
                       TargetOpts, CI.getLangOpts(),
                       CI.getTarget().getDataLayout(), TheModule.get(), BA,

@@ -58,6 +58,23 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
+/// \brief Determine if Fortran link libraies are needed
+bool tools::needFortranLibs(const Driver &D, const ArgList &Args) {
+  if (D.IsFortranMode() && !Args.hasArg(options::OPT_nostdlib) &&
+      !Args.hasArg(options::OPT_noFlangLibs)) {
+    return true;
+  }
+
+  return false;
+}
+
+/// \brief Determine if Fortran "main" object is needed
+static bool needFortranMain(const Driver &D, const ArgList &Args) {
+  return (needFortranLibs(D, Args)
+       && (!Args.hasArg(options::OPT_Mnomain) ||
+           !Args.hasArg(options::OPT_no_fortran_main)));
+}
+
 void tools::addPathIfExists(const Driver &D, const Twine &Path,
                             ToolChain::path_list &Paths) {
   if (D.getVFS().exists(Path))

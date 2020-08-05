@@ -179,6 +179,7 @@ void Driver::setDriverModeFromOption(StringRef Opt) {
                    .Case("cpp", CPPMode)
                    .Case("cl", CLMode)
                    .Case("flang", FlangMode)
+                   .Case("fortran", FortranMode)
                    .Default(None))
     Mode = *M;
   else
@@ -271,18 +272,31 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
 
   // -{E,EP,P,M,MM} only run the preprocessor.
   if (CCCIsCPP() || (PhaseArg = DAL.getLastArg(options::OPT_E)) ||
+      (PhaseArg = DAL.getLastArg(options::OPT_fsyntax_only)) ||
       (PhaseArg = DAL.getLastArg(options::OPT__SLASH_EP)) ||
       (PhaseArg = DAL.getLastArg(options::OPT_M, options::OPT_MM)) ||
       (PhaseArg = DAL.getLastArg(options::OPT__SLASH_P))) {
-    FinalPhase = phases::Preprocess;
+
+    // -fsyntax-only or -E stops Fortran compilation after FortranFrontend
+    if (IsFortranMode() && (DAL.getLastArg(options::OPT_E) ||
+      DAL.getLastArg(options::OPT_fsyntax_only))) {
+      FinalPhase = phases::FortranFrontend;
+
+      // if not Fortran, fsyntax_only implies 'Compile' is the FinalPhase
+    } else if (DAL.getLastArg(options::OPT_fsyntax_only)) {
+      FinalPhase = phases::Compile;
+
+      // everything else has 'Preprocess' as its FinalPhase
+    } else {
+      FinalPhase = phases::Preprocess;
+    }
 
   // --precompile only runs up to precompilation.
   } else if ((PhaseArg = DAL.getLastArg(options::OPT__precompile))) {
     FinalPhase = phases::Precompile;
 
-  // -{fsyntax-only,-analyze,emit-ast} only run up to the compiler.
-  } else if ((PhaseArg = DAL.getLastArg(options::OPT_fsyntax_only)) ||
-             (PhaseArg = DAL.getLastArg(options::OPT_print_supported_cpus)) ||
+    // -{analyze,emit-ast} only run up to the compiler.
+  } else if ((PhaseArg = DAL.getLastArg(options::OPT_print_supported_cpus)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_module_file_info)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_verify_pch)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_rewrite_objc)) ||
@@ -3647,6 +3661,13 @@ Action *Driver::ConstructPhaseAction(
       return C.MakeAction<HeaderModulePrecompileJobAction>(Input, OutputTy,
                                                            ModName);
     return C.MakeAction<PrecompileJobAction>(Input, OutputTy);
+  }
+  case phases::FortranFrontend: {
+    if (Args.hasArg(options::OPT_fsyntax_only))
+      return C.MakeAction<FortranFrontendJobAction>(Input,
+                                                    types::TY_Nothing);
+    return C.MakeAction<FortranFrontendJobAction>(Input,
+                                                  types::TY_LLVM_IR);
   }
   case phases::Compile: {
     if (Args.hasArg(options::OPT_fsyntax_only))
